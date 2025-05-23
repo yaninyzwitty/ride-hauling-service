@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package driver;
+
+option go_package = "shared/proto/driver;driver";
+
+message Driver {
+  string driver_id = 1;
+  Location location = 2;
+   string geohash = 3; 
+}
+
+message Location {
+  float latitude = 1;
+  float longitude = 2;
+}
+
+service DriverService {
+  rpc FindNearbyDrivers(stream FindNearbyDriversRequest) returns (stream StreamDriversResponse);
+}
+
+message FindNearbyDriversRequest {
+  Location location = 1;
+}
+
+message StreamDriversResponse {
+  repeated Driver nearby_drivers = 1;
+}

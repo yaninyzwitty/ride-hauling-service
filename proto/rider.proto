@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package rider;
+
+option go_package = "shared/proto/rider;rider";
+
+service RiderService {
+  rpc GetNearbyRiders(RiderRequest) returns (RiderResponse);
+}
+
+message RiderRequest {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+message RiderResponse {
+  repeated string rider_ids = 1;
+}
