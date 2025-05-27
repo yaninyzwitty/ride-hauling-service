@@ -16,6 +16,7 @@ var predefinedRoutes = [][][]float64{
 		{37.77163599059948, -122.41125013468515},
 		{37.773790702602305, -122.41168660785345},
 	},
+
 	{
 		{37.78938865879484, -122.42206098118852},
 		{37.79112418447625, -122.42238063604239},
@@ -64,6 +65,7 @@ type Service struct {
 func NewService() *Service {
 	var drivers []*Driver
 
+	// creates one driver per predefined route entry
 	for i, route := range predefinedRoutes {
 		drivers = append(drivers, &Driver{
 			DriverId: fmt.Sprintf("driver-%d", i),
