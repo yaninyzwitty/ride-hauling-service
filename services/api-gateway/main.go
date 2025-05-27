@@ -1,9 +1,9 @@
 package main
 
 import (
-	"log"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/websocket"
 	"github.com/yaninyzwitty/ride-hauling-app/services/api-gateway/grpc_clients/driver_client"
@@ -48,7 +48,16 @@ func main() {
 		handleCreateTrip(w, r, tripClient)
 	}))
 
-	log.Printf("Starting api gateway on port %s", HttpAddr)
-	log.Fatal(http.ListenAndServe(HttpAddr, nil))
+	// log.Printf("Starting api gateway on port %s", HttpAddr)
+	// avoid using log
+	slog.Info("Starting api gateway on port",
+		"port", HttpAddr,
+	)
+
+	if err := http.ListenAndServe(HttpAddr, nil); err != nil {
+		slog.Error("HTTP server failed", "error", err)
+		os.Exit(1)
+
+	}
 
 }
