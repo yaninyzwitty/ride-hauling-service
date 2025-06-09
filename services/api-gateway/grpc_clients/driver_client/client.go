@@ -10,16 +10,14 @@ import (
 )
 
 type DriverServiceClient struct {
-	Client pb.DriverServiceClient
-	conn   *grpc.ClientConn
+	Client              pb.DriverServiceClient
+	conn                *grpc.ClientConn
+	grpcDriverClientUrl string
 }
 
-var DriverServiceUrl = "50052"
+func NewDriverServiceClient(grpcDriverClientUrl string) (*DriverServiceClient, error) {
 
-func NewDriverServiceClient() (*DriverServiceClient, error) {
-	driverServiceUrl := DriverServiceUrl
-
-	conn, err := grpc.NewClient(driverServiceUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(grpcDriverClientUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to driver service: %w", err)
 	}
@@ -40,6 +38,6 @@ func (dsc *DriverServiceClient) Close() error {
 }
 
 func (dsc *DriverServiceClient) FindNearbyDrivers(ctx context.Context) (pb.DriverService_FindNearbyDriversClient, error) {
-	// TODO-add proper srp / ocp pattern
-	return nil, nil
+	return dsc.Client.FindNearbyDrivers(ctx)
+
 }

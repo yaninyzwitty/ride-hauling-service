@@ -14,11 +14,8 @@ type TripServiceClient struct {
 	conn   *grpc.ClientConn
 }
 
-var TripServiceUrl = "50053"
-
-func NewTripServiceClient() (*TripServiceClient, error) {
-	tripServiceUrl := TripServiceUrl
-	conn, err := grpc.NewClient(tripServiceUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NewTripServiceClient(tripServiceAddr string) (*TripServiceClient, error) {
+	conn, err := grpc.NewClient(tripServiceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to trip service: %w", err)
 	}
@@ -38,7 +35,6 @@ func (tsc *TripServiceClient) Close() error {
 	return nil
 }
 
-func (tsc *TripServiceClient) CreateTip(ctx context.Context, req *pb.CreateTripRequest) (*pb.CreateTripResponse, error) {
-	// TODO-add proper srp / ocp pattern
-	return nil, nil
+func (tsc *TripServiceClient) CreateTrip(ctx context.Context, req *pb.CreateTripRequest) (*pb.CreateTripResponse, error) {
+	return tsc.Client.CreateTrip(ctx, req)
 }

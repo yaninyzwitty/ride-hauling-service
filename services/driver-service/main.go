@@ -1,39 +1,34 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 
 	"google.golang.org/grpc"
 )
 
-var GrpcAddr = ":50052"
-var HttpAddr = ":8081"
+var GrpcAddr = "50051"
 
 func main() {
 	// start http server in a go routine
-	go func() {
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Requests from: ",
-				"remote_addr", r.RemoteAddr,
-				"request_path", r.URL.Path,
-			)
+	// go func() {
+	// 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 
-			writeJSON(w, http.StatusOK, map[string]string{"message": "Hello there💖"})
-		})
-		slog.Info("Starting driver service HTTP server", "port", HttpAddr)
+	// 		writeJSON(w, http.StatusOK, map[string]string{"message": "Hello there💖"})
+	// 	})
+	// 	slog.Info("Starting driver service HTTP server", "port", HttpAddr)
 
-		// avoid fatal log
-		if err := http.ListenAndServe(HttpAddr, nil); err != nil {
-			slog.Error("HTTP server failed", "error", err)
-			os.Exit(1)
-		}
-	}()
+	// 	// avoid fatal log
+	// 	if err := http.ListenAndServe(HttpAddr, nil); err != nil {
+	// 		slog.Error("HTTP server failed", "error", err)
+	// 		os.Exit(1)
+	// 	}
+	// }()
 
 	// start grpc server
-	lis, err := net.Listen("tcp", GrpcAddr)
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", GrpcAddr))
 	if err != nil {
 		slog.Error("Failed to listen", "error", err)
 		os.Exit(1)

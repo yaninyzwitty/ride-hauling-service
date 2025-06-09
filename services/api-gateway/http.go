@@ -56,7 +56,7 @@ func handleCreateTrip(w http.ResponseWriter, r *http.Request, tripClient *trip_c
 
 	defer r.Body.Close()
 
-	resp, err := tripClient.CreateTip(ctx, &trip.CreateTripRequest{
+	resp, err := tripClient.CreateTrip(ctx, &trip.CreateTripRequest{
 		StartLocation: &trip.Coordinate{
 			Latitude:  float32(reqBody.Pickup.Latitude),
 			Longitude: float32(reqBody.Pickup.Longitude),
@@ -68,7 +68,7 @@ func handleCreateTrip(w http.ResponseWriter, r *http.Request, tripClient *trip_c
 	})
 
 	if err != nil {
-		http.Error(w, "Failed to create trip", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
