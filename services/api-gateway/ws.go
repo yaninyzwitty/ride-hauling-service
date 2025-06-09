@@ -4,93 +4,92 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"time"
+	"os"
 
 	"github.com/gorilla/websocket"
-	"github.com/yaninyzwitty/ride-hauling-app/services/api-gateway/grpc_clients/driver_client"
-	pb "github.com/yaninyzwitty/ride-hauling-app/shared/proto/driver"
+	driverClientPb "github.com/yaninyzwitty/ride-hauling-app/services/api-gateway/grpc_clients/driver_client"
+	driverPb "github.com/yaninyzwitty/ride-hauling-app/shared/proto/driver"
 )
 
-func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, driverClient *driver_client.DriverServiceClient) {
+func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, client *driverClientPb.DriverServiceClient) {
+	var ctx = r.Context()
+
+	// upgrade http connection to websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		slog.Error("websocket upgrade failed", "error", err)
+		slog.Error("failed to upgrade http connection to websocket connection", "error", err)
 		return
 	}
-
 	defer func(conn *websocket.Conn) {
-		conn.Close()
+		_ = conn.Close()
 	}(conn)
 
-	slog.Info("WebSocket connection established", "remoteaddr", r.RemoteAddr)
-
-	// add channels for listening to client messages ie user location updates
-	clientLocations := make(chan *pb.Location)
+	slog.Info("websocket connection established")
+	// make a channel to listen for client updates
+	clientLocations := make(chan *driverPb.Driver)
 
 	go func() {
 		for {
+			// here we read message from the websocket
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-					slog.Info("client disconnected", "remote_addr", r.RemoteAddr)
-				} else {
-					slog.Error("error reading message from websocket", "error", err)
-				}
+				slog.Error("error reading websocket msg:", "error", err)
 				close(clientLocations)
 				return
 			}
 
-			var location pb.Location
+			var location driverPb.Driver
 			if err := json.Unmarshal(msg, &location); err != nil {
-				slog.Error("Invalid location data", "error", err)
+				slog.Info("Invalid location data: ", "error", err)
 				continue
 			}
 
 			clientLocations <- &location
 		}
+
 	}()
 
-	// start streaming driver updates
-	stream, err := driverClient.FindNearbyDrivers(r.Context())
+	// here we start streaming driver updates
+	stream, err := client.FindNearbyDrivers(ctx)
+
 	if err != nil {
-		slog.Error("failed to start grpc stream", "error", err)
-		return
+		slog.Error("failed to start grpc stream: ", "error", err)
+		os.Exit(1)
 	}
 	defer stream.CloseSend()
 
-	// handle sending client location updates to driver service
+	// Handle sending client location updates to the driver service
+
 	go func() {
-		for loc := range clientLocations {
-			err := stream.Send(&pb.FindNearbyDriversRequest{
-				Location: loc,
-			})
-			if err != nil {
-				slog.Error("failed to send location update to driver service", "error", err)
+		for location := range clientLocations {
+			if err := stream.Send(&driverPb.FindNearbyDriversRequest{
+				Location: &driverPb.Location{
+					Latitude:  location.Location.Latitude,
+					Longitude: location.Location.Longitude,
+				},
+			}); err != nil {
+				slog.Error("failed to send driver location update: ", "error", err)
 				return
 			}
-
-			// Optional: Throttle the rate of location updates
-			time.Sleep(500 * time.Millisecond)
 		}
 	}()
 
-	// receive driver updates from driver service and forward them to client
+	// here we handle receiving driver updates
 	for {
-		res, err := stream.Recv()
+		response, err := stream.Recv()
 		if err != nil {
-			slog.Error("error receiving driver updates", "error", err)
-			return
+			slog.Error("error receiving driver updates: ", "error", err)
+			os.Exit(1)
 		}
 
-		driverJson, err := json.Marshal(res.NearbyDrivers)
+		driverJson, err := json.Marshal(response.NearbyDrivers)
 		if err != nil {
-			slog.Error("error marshalling driver updates", "error", err)
-			return
+			slog.Error("Error marshaling driver updates: ", "error", err)
+			continue // we are in a loop
 		}
-
-		// send driver updates using websocket
+		// then send driver updates to websocket clients
 		if err := conn.WriteMessage(websocket.TextMessage, driverJson); err != nil {
-			slog.Error("error sending driver updates", "error", err)
+			slog.Error("Error sending driver updates to websocket: ", "error", err)
 			return
 		}
 	}
