@@ -1,97 +1,96 @@
 package main
 
-// import (
-// 	"encoding/json"
-// 	"log/slog"
-// 	"net/http"
-// 	"time"
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"os"
 
-// 	"github.com/gorilla/websocket"
-// 	"github.com/yaninyzwitty/ride-hauling-app/services/api-gateway/grpc_clients/driver_client"
-// 	pb "github.com/yaninyzwitty/ride-hauling-app/shared/proto/driver"
-// )
+	"github.com/gorilla/websocket"
+	driverClientPb "github.com/yaninyzwitty/ride-hauling-app/services/api-gateway/grpc_clients/driver_client"
+	driverPb "github.com/yaninyzwitty/ride-hauling-app/shared/proto/driver"
+)
 
-// func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, driverClient *driver_client.DriverServiceClient) {
-// 	conn, err := upgrader.Upgrade(w, r, nil)
-// 	if err != nil {
-// 		slog.Error("websocket upgrade failed", "error", err)
-// 		return
-// 	}
+func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, client *driverClientPb.DriverServiceClient) {
+	var ctx = r.Context()
 
-// 	defer func(conn *websocket.Conn) {
-// 		conn.Close()
-// 	}(conn)
+	// upgrade http connection to websocket connection
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		slog.Error("failed to upgrade http connection to websocket connection", "error", err)
+		return
+	}
+	defer func(conn *websocket.Conn) {
+		_ = conn.Close()
+	}(conn)
 
-// 	slog.Info("WebSocket connection established", "remoteaddr", r.RemoteAddr)
+	slog.Info("websocket connection established")
+	// make a channel to listen for client updates
+	clientLocations := make(chan *driverPb.Driver)
 
-// 	// add channels for listening to client messages ie user location updates
-// 	clientLocations := make(chan *pb.Location)
+	go func() {
+		for {
+			// here we read message from the websocket
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				slog.Error("error reading websocket msg:", "error", err)
+				close(clientLocations)
+				return
+			}
 
-// 	go func() {
-// 		for {
-// 			_, msg, err := conn.ReadMessage()
-// 			if err != nil {
-// 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-// 					slog.Info("client disconnected", "remote_addr", r.RemoteAddr)
-// 				} else {
-// 					slog.Error("error reading message from websocket", "error", err)
-// 				}
-// 				close(clientLocations)
-// 				return
-// 			}
+			var location driverPb.Driver
+			if err := json.Unmarshal(msg, &location); err != nil {
+				slog.Info("Invalid location data: ", "error", err)
+				continue
+			}
 
-// 			var location pb.Location
-// 			if err := json.Unmarshal(msg, &location); err != nil {
-// 				slog.Error("Invalid location data", "error", err)
-// 				continue
-// 			}
+			clientLocations <- &location
+		}
 
-// 			clientLocations <- &location
-// 		}
-// 	}()
+	}()
 
-// 	// start streaming driver updates
-// 	stream, err := driverClient.FindNearbyDrivers(r.Context())
-// 	if err != nil {
-// 		slog.Error("failed to start grpc stream", "error", err)
-// 		return
-// 	}
-// 	defer stream.CloseSend()
+	// here we start streaming driver updates
+	stream, err := client.FindNearbyDrivers(ctx)
 
-// 	// handle sending client location updates to driver service
-// 	go func() {
-// 		for loc := range clientLocations {
-// 			err := stream.Send(&pb.FindNearbyDriversRequest{
-// 				Location: loc,
-// 			})
-// 			if err != nil {
-// 				slog.Error("failed to send location update to driver service", "error", err)
-// 				return
-// 			}
+	if err != nil {
+		slog.Error("failed to start grpc stream: ", "error", err)
+		os.Exit(1)
+	}
+	defer stream.CloseSend()
 
-// 			// Optional: Throttle the rate of location updates
-// 			time.Sleep(500 * time.Millisecond)
-// 		}
-// 	}()
+	// Handle sending client location updates to the driver service
 
-// 	// receive driver updates from driver service and forward them to client
-// 	for {
-// 		res, err := stream.Recv()
-// 		if err != nil {
-// 			slog.Error("error receiving driver updates", "error", err)
-// 			return
-// 		}
+	go func() {
+		for location := range clientLocations {
+			if err := stream.Send(&driverPb.FindNearbyDriversRequest{
+				Location: &driverPb.Location{
+					Latitude:  location.Location.Latitude,
+					Longitude: location.Location.Longitude,
+				},
+			}); err != nil {
+				slog.Error("failed to send driver location update: ", "error", err)
+				return
+			}
+		}
+	}()
 
-// 		driverJson, err := json.Marshal(res.NearbyDrivers)
-// 		if err != nil {
-// 			slog.Error("error marshalling driver updates", "error", err)
-// 			return
-// 		}
+	// here we handle receiving driver updates
+	for {
+		response, err := stream.Recv()
+		if err != nil {
+			slog.Error("error receiving driver updates: ", "error", err)
+			os.Exit(1)
+		}
 
-// 		// send driver updates using websocket
-// 		if err := conn.WriteMessage(websocket.TextMessage, driverJson); err != nil {
-// 			slog.Error("error sending driver updates", "error", err)
-// 			return
-// 		}
-// 	}
-// }
+		driverJson, err := json.Marshal(response.NearbyDrivers)
+		if err != nil {
+			slog.Error("Error marshaling driver updates: ", "error", err)
+			continue // we are in a loop
+		}
+		// then send driver updates to websocket clients
+		if err := conn.WriteMessage(websocket.TextMessage, driverJson); err != nil {
+			slog.Error("Error sending driver updates to websocket: ", "error", err)
+			return
+		}
+	}
+}

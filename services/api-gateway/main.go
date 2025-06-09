@@ -10,9 +10,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gorilla/websocket"
+	driverpb "github.com/yaninyzwitty/ride-hauling-app/services/api-gateway/grpc_clients/driver_client"
 	trippb "github.com/yaninyzwitty/ride-hauling-app/services/api-gateway/grpc_clients/trip_client"
 	"github.com/yaninyzwitty/ride-hauling-app/shared/pkg"
 )
+
+// use this to upgrade the http connection to a websocket connection
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all origins for now
+	},
+}
 
 func main() {
 	config := &pkg.Config{}
@@ -21,6 +30,17 @@ func main() {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+
+	// create driver service url
+	driverServiceUrl := fmt.Sprintf(":%d", config.DriverService.Port)
+
+	// create a driver client
+	driverClient, err := driverpb.NewDriverServiceClient(driverServiceUrl)
+	if err != nil {
+		slog.Error("failed to create driver service client", "error", err)
+		return
+	}
+	defer driverClient.Close()
 
 	// create a trip service url preferably (use string.builder for performance)
 	tripServiceUrl := fmt.Sprintf(":%d", config.TripService.Port)
@@ -37,6 +57,11 @@ func main() {
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", config.APIGateway.Port),
 	}
+
+	// handle livestream location updates
+	http.HandleFunc("/ws/drivers", func(w http.ResponseWriter, r *http.Request) {
+		handleDriversWebSocket(w, r, driverClient)
+	})
 
 	// Setup routes
 	http.HandleFunc("/trip", EnableCors(func(w http.ResponseWriter, r *http.Request) {
