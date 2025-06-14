@@ -111,3 +111,15 @@ func main() {
 	wg.Wait()
 	slog.Info("service shutdown complete")
 }
+
+// try this
+// {
+// 	"start_location": {
+// 	  "latitude": 34.0522,
+// 	  "longitude": -118.2437
+// 	},
+// 	"end_location": {
+// 	  "latitude": 37.7749,
+// 	  "longitude": -122.4194
+// 	}
+//   }

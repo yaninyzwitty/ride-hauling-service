@@ -63,6 +63,10 @@ func (h *TripGrpcHandler) CreateTrip(ctx context.Context, req *pb.CreateTripRequ
 		return nil, status.Errorf(codes.Internal, "failed to parse response body: %v", err)
 	}
 
+	if len(routeResp.Routes) == 0 {
+		return nil, status.Errorf(codes.Internal, "no routes found btn the pickup and destination")
+	}
+
 	// parse OSRMResponse to pb.Route
 	route := routeResp.Routes[0]
 

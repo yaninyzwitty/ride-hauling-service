@@ -94,10 +94,10 @@ api-gateway:
   port: 8080
 
 driver-service:
-  port: 8081
+  port: 50051
 
 trip-service:
-  port: 8082
+  port: 50052
 ```
 
 ## 🔧 Development
